@@ -1,98 +1,216 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  FlatList,
+  TouchableOpacity,
+  ActivityIndicator,
+  Alert,
+  StyleSheet,
+  TextInput,
+} from 'react-native';
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const FAVORITES_KEY = '@my_favorites_ids';
 
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+  console.log('INDEX.TSX CHARGÉ ✅');
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+  const [users, setUsers] = useState<any[]>([]);
+  const [favorites, setFavorites] = useState<number[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showFavs, setShowFavs] = useState(false);
+
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+
+  // 🔄 CHARGEMENT INITIAL
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+
+      const res = await axios.get(
+        'https://jsonplaceholder.typicode.com/users'
+      );
+      setUsers(res.data);
+
+      const storedFavs = await AsyncStorage.getItem(FAVORITES_KEY);
+      if (storedFavs) {
+        setFavorites(JSON.parse(storedFavs));
+      }
+    } catch (e) {
+      Alert.alert('Erreur', 'Chargement impossible');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ⭐ FAVORIS
+  const toggleFavorite = async (id: number) => {
+    let updated;
+
+    if (favorites.includes(id)) {
+      updated = favorites.filter(f => f !== id);
+    } else {
+      updated = [...favorites, id];
+    }
+
+    setFavorites(updated);
+    await AsyncStorage.setItem(FAVORITES_KEY, JSON.stringify(updated));
+  };
+
+  // 🧹 EFFACER TOUT (FIX DÉFINITIF)
+  const clearAll = async () => {
+    try {
+      console.log('CLEAR ALL APPELÉ ✅');
+
+      await AsyncStorage.removeItem(FAVORITES_KEY);
+
+      setFavorites([]);
+      setShowFavs(false);
+
+      Alert.alert('Succès', 'Favoris supprimés');
+    } catch (e) {
+      Alert.alert('Erreur', 'Suppression impossible');
+    }
+  };
+
+  // ➕ POST API
+  const addUser = async () => {
+    if (!name || !email) {
+      Alert.alert('Erreur', 'Champs requis');
+      return;
+    }
+
+    try {
+      const res = await axios.post(
+        'https://jsonplaceholder.typicode.com/users',
+        { name, email }
+      );
+
+      setUsers([res.data, ...users]);
+      setName('');
+      setEmail('');
+    } catch (e) {
+      Alert.alert('Erreur', 'Ajout impossible');
+    }
+  };
+
+  const displayedUsers = showFavs
+    ? users.filter(u => favorites.includes(u.id))
+    : users;
+
+  const renderItem = ({ item }: any) => {
+    const isFav = favorites.includes(item.id);
+
+    return (
+      <View style={styles.card}>
+        <View>
+          <Text style={styles.name}>{item.name}</Text>
+          <Text>{item.email}</Text>
+        </View>
+
+        <TouchableOpacity onPress={() => toggleFavorite(item.id)}>
+          <Text style={styles.star}>{isFav ? '★' : '☆'}</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>CryptoWatch</Text>
+
+      {/* FORMULAIRE */}
+      <TextInput
+        placeholder="Nom"
+        value={name}
+        onChangeText={setName}
+        style={styles.input}
+      />
+      <TextInput
+        placeholder="Email"
+        value={email}
+        onChangeText={setEmail}
+        style={styles.input}
+      />
+
+      <TouchableOpacity style={styles.addBtn} onPress={addUser}>
+        <Text style={{ color: 'white' }}>Ajouter</Text>
+      </TouchableOpacity>
+
+      {/* ACTIONS */}
+      <View style={styles.actions}>
+        <TouchableOpacity
+          style={styles.btn}
+          onPress={() => setShowFavs(!showFavs)}
+        >
+          <Text>{showFavs ? 'Tous' : 'Favoris'}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.danger} onPress={clearAll}>
+          <Text style={{ color: 'white' }}>Effacer tout</Text>
+        </TouchableOpacity>
+      </View>
+
+      {loading ? (
+        <ActivityIndicator size="large" />
+      ) : (
+        <FlatList
+          data={displayedUsers}
+          keyExtractor={item => item.id.toString()}
+          renderItem={renderItem}
+        />
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
+  container: { flex: 1, padding: 16 },
+  title: { fontSize: 24, fontWeight: 'bold', textAlign: 'center' },
+  input: {
+    borderWidth: 1,
+    borderColor: '#ccc',
+    padding: 8,
+    marginVertical: 4,
+    borderRadius: 5,
+  },
+  addBtn: {
+    backgroundColor: '#3498db',
+    padding: 10,
     alignItems: 'center',
-    gap: 8,
+    marginBottom: 10,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  actions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 10,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  btn: {
+    backgroundColor: '#ecf0f1',
+    padding: 10,
+    borderRadius: 5,
   },
+  danger: {
+    backgroundColor: '#e74c3c',
+    padding: 10,
+    borderRadius: 5,
+  },
+  card: {
+    backgroundColor: 'white',
+    padding: 12,
+    marginVertical: 6,
+    borderRadius: 8,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  name: { fontWeight: 'bold' },
+  star: { fontSize: 24, color: '#f1c40f' },
 });
